@@ -461,10 +461,10 @@ const state = {
   emotions: {anger:0,sadness:0,fear:0,pain:0,guilt:0},
   selectedDims: {},
   importance: {},
-  perception: {},
+  perception: {}, // keyed by area.id
   currentArea: null,
 };
-AREAS.forEach(a => { state.selectedDims[a.id] = []; });
+AREAS.forEach(a => { state.selectedDims[a.id] = []; state.perception[a.id] = 5; });
 let radarChart = null;
 
 /* ══ HERO → ASSESSMENT ═══════════════════════════════════ */
@@ -573,17 +573,16 @@ function buildPhase3(){
               oninput="state.importance['${d.id}']=+this.value;document.getElementById('iv_${d.id}').textContent=this.value"/>
           </div>`).join("")}
         <div class="divider"></div>
-        <div class="sec-title-blue">Perception — How satisfied are you with this area right now?</div>
+        <div class="sec-title-blue">Perception — How satisfied are you with <em>${area.label}</em> overall?</div>
         <div class="sec-hint">0 = very dissatisfied · 10 = fully satisfied</div>
-        ${dims.map(d=>`
-          <div class="imp-row">
-            <div class="imp-row-top">
-              <span class="imp-dim-name">${d.name}</span>
-              <span class="perc-val" id="pv_${d.id}">${state.perception[d.id]}</span>
-            </div>
-            <input type="range" class="s-blue" min="0" max="10" value="${state.perception[d.id]}"
-              oninput="state.perception['${d.id}']=+this.value;document.getElementById('pv_${d.id}').textContent=this.value"/>
-          </div>`).join("")}
+        <div class="imp-row">
+          <div class="imp-row-top">
+            <span class="imp-dim-name">${area.label} — Overall Satisfaction</span>
+            <span class="perc-val" id="pv_${area.id}">${state.perception[area.id]}</span>
+          </div>
+          <input type="range" class="s-blue" min="0" max="10" value="${state.perception[area.id]}"
+            oninput="state.perception['${area.id}']=+this.value;document.getElementById('pv_${area.id}').textContent=this.value"/>
+        </div>
       </div>`;
   }).join("");
 }
@@ -595,19 +594,15 @@ function impactoDimension(dim){
 function calcularAreaScore(area){
   const dims=area.dimensions.filter(d=>state.selectedDims[area.id].includes(d.id));
   const totalImp=dims.reduce((s,d)=>s+(state.importance[d.id]||0),0);
-  return Math.max(0,Math.min(10,dims.reduce((s,d)=>{
+  const impactoTotal=dims.reduce((s,d)=>{
     const pesoNorm=totalImp>0?(state.importance[d.id]||0)/totalImp:1/dims.length;
-    const impacto=impactoDimension(d);
-    return s+pesoNorm*(10*(1-impacto/10));
-  },0)));
+    const impactoDim=EMOTIONS.reduce((si,e)=>si+state.emotions[e.id]*d.w[e.id],0);
+    return s+pesoNorm*impactoDim;
+  },0);
+  return Math.max(0,Math.min(10,round1(10-impactoTotal)));
 }
 function calcularPercepcionArea(area){
-  const dims=area.dimensions.filter(d=>state.selectedDims[area.id].includes(d.id));
-  const totalImp=dims.reduce((s,d)=>s+(state.importance[d.id]||0),0);
-  return Math.max(0,Math.min(10,dims.reduce((s,d)=>{
-    const pesoNorm=totalImp>0?(state.importance[d.id]||0)/totalImp:1/dims.length;
-    return s+pesoNorm*(state.perception[d.id]||0);
-  },0)));
+  return Math.max(0,Math.min(10,state.perception[area.id]||0));
 }
 function calcularBreakdown(satisfaccion){
   const carga=EMOTIONS.reduce((s,e)=>s+state.emotions[e.id],0)/EMOTIONS.length;
@@ -694,8 +689,8 @@ function computeResults(){
     <div class="risk-wrap">
       <div class="risk-title">Emotional Risk Index — Weighted Impact Across All 40 Dimensions</div>
       ${EMOTIONS.map(e=>`
-        <div class="risk-row rr-${e.id}">
-          <div class="risk-emo">${e.label}</div>
+        <div class="risk-row rr-${e.id}" ${e.id===topEmo.id?'style="font-weight:700;"':''}>
+          <div class="risk-emo">${e.label}${e.id===topEmo.id?' ★':''}</div>
           <div class="rtrack"><div class="rfill" style="width:${risk[e.id]*10}%"></div></div>
           <div class="rnum">${risk[e.id]}</div>
         </div>`).join("")}
@@ -838,8 +833,8 @@ function goPhase(n){
 
 function restartTool(){
   state.emotions={anger:0,sadness:0,fear:0,pain:0,guilt:0};
-  AREAS.forEach(a=>{state.selectedDims[a.id]=[];});
-  state.importance={};state.perception={};state.currentArea=null;
+  AREAS.forEach(a=>{state.selectedDims[a.id]=[]; state.perception[a.id]=5;});
+  state.importance={};state.currentArea=null;
   if(radarChart){radarChart.destroy();radarChart=null;}
   document.querySelectorAll(".phase-block").forEach(b=>b.classList.remove("active"));
   document.getElementById("phase1").classList.add("active");
